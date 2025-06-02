@@ -30,6 +30,8 @@ const words = [
 let currentIndex = 0;
 let selectedVoice = null;
 let speechRate = 1;
+let score = 0;
+let wrongAnswers = [];
 
 function populateVoices() {
   const voiceSelect = document.getElementById("voiceSelect");
@@ -41,14 +43,7 @@ function populateVoices() {
     option.textContent = `${voice.name} (${voice.lang})`;
     voiceSelect.appendChild(option);
   });
-  if (voices.length > 0) {
-    selectedVoice = voices[0];
-    document.getElementById("voiceSelect").selectedIndex = 0;
-  } else {
-    const option = document.createElement("option");
-    option.textContent = "לא נמצאו קולות באנגלית";
-    voiceSelect.appendChild(option);
-  }
+  if (voices.length > 0) selectedVoice = voices[0];
 }
 
 function waitForVoices(timeout = 3000) {
@@ -113,8 +108,12 @@ async function startTest() {
 
   document.getElementById("settings").style.display = "none";
   document.getElementById("question-box").style.display = "block";
+  document.getElementById("scoreBox").style.display = "block";
   document.getElementById("totalQuestions").textContent = words.length;
+  score = 0;
   currentIndex = 0;
+  wrongAnswers = [];
+  updateScoreDisplay();
   showQuestion();
 }
 
@@ -135,19 +134,43 @@ function submitAnswer() {
 
   if (input === correct) {
     feedback.textContent = "✔️ נכון!";
+    score += 4;
   } else {
     feedback.textContent = `❌ טעות. התשובה הנכונה היא: ${correct}`;
+    wrongAnswers.push({ ...words[currentIndex], userAnswer: input });
   }
 
+  updateScoreDisplay();
   currentIndex++;
   if (currentIndex < words.length) {
     setTimeout(showQuestion, 1500);
   } else {
-    setTimeout(() => {
-      alert("🎉 סיימת את מבחן האיות!");
-      location.reload();
-    }, 2000);
+    setTimeout(showFinalResults, 2000);
   }
+}
+
+function updateScoreDisplay() {
+  document.getElementById("scoreDisplay").textContent = `ניקוד: ${score} / ${words.length * 4}`;
+}
+
+function showFinalResults() {
+  const resultBox = document.createElement("div");
+  resultBox.style.padding = "1rem";
+  resultBox.style.backgroundColor = "rgba(255,255,255,0.2)";
+  resultBox.style.borderRadius = "10px";
+  resultBox.innerHTML = `<h3>🎯 סיימת! הניקוד שלך: ${score} מתוך ${words.length * 4}</h3>`;
+
+  if (wrongAnswers.length > 0) {
+    resultBox.innerHTML += "<h4>טעויות שלך:</h4><ul>";
+    wrongAnswers.forEach(w => {
+      resultBox.innerHTML += `<li>❌ <b>${w.translation}</b> — כתבת: <i>${w.userAnswer}</i> | תשובה נכונה: <b>${w.word}</b></li>`;
+    });
+    resultBox.innerHTML += "</ul>";
+  } else {
+    resultBox.innerHTML += "<p>✔️ כל הכבוד! לא טעית בכלל!</p>";
+  }
+
+  document.body.appendChild(resultBox);
 }
 
 function handleKey(event) {
@@ -159,3 +182,33 @@ function handleKey(event) {
 function speakCurrentWord() {
   speak(words[currentIndex].word);
 }
+
+
+function saveLastResult() {
+  const now = new Date();
+  const result = {
+    score,
+    total: words.length * 4,
+    date: now.toLocaleDateString("he-IL"),
+    time: now.toLocaleTimeString("he-IL")
+  };
+  localStorage.setItem("lastSpellMasterResult", JSON.stringify(result));
+}
+
+function loadLastResult() {
+  const data = localStorage.getItem("lastSpellMasterResult");
+  if (!data) return;
+  const result = JSON.parse(data);
+  const box = document.createElement("div");
+  box.style.backgroundColor = "#f8f8f8";
+  box.style.border = "1px solid #ccc";
+  box.style.borderRadius = "8px";
+  box.style.padding = "10px";
+  box.style.marginBottom = "10px";
+  box.style.textAlign = "right";
+  box.style.fontSize = "16px";
+  box.innerHTML = `📌 <b>תוצאתך האחרונה:</b> ${result.score} / ${result.total} בתאריך ${result.date}, ${result.time}`;
+  document.body.insertBefore(box, document.body.firstChild);
+}
+
+window.addEventListener("DOMContentLoaded", loadLastResult);
