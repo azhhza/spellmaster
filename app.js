@@ -236,3 +236,41 @@ showFinalResults = function() {
   saveLastResult();
   originalShowFinalResults();
 };
+
+
+function createHomeButton() {
+  const homeBtn = document.createElement("button");
+  homeBtn.textContent = "🏠 חזור למסך הבית";
+  homeBtn.style.marginTop = "20px";
+  homeBtn.style.padding = "10px 20px";
+  homeBtn.style.fontSize = "16px";
+  homeBtn.style.borderRadius = "8px";
+  homeBtn.style.border = "1px solid #999";
+  homeBtn.style.backgroundColor = "#f0f0f0";
+  homeBtn.style.cursor = "pointer";
+  homeBtn.onclick = () => {
+    location.reload();
+  };
+  return homeBtn;
+}
+
+// Add home button to final screen
+const originalShowFinalResultsWithSave = showFinalResults;
+showFinalResults = function() {
+  saveLastResult();
+  originalShowFinalResultsWithSave();
+  const container = document.getElementById("quizContainer");
+  container.appendChild(createHomeButton());
+};
+
+// Add home button on top of quiz
+function insertHomeDuringQuiz() {
+  const container = document.getElementById("quizContainer");
+  const topBtn = createHomeButton();
+  topBtn.style.position = "fixed";
+  topBtn.style.top = "10px";
+  topBtn.style.right = "10px";
+  topBtn.style.zIndex = "1001";
+  container.appendChild(topBtn);
+}
+window.addEventListener("DOMContentLoaded", insertHomeDuringQuiz);
