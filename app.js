@@ -41,12 +41,41 @@ function populateVoices() {
     option.textContent = `${voice.name} (${voice.lang})`;
     voiceSelect.appendChild(option);
   });
-  if (voices.length > 0) selectedVoice = voices[0];
+  if (voices.length > 0) {
+    selectedVoice = voices[0];
+    document.getElementById("voiceSelect").selectedIndex = 0;
+  } else {
+    const option = document.createElement("option");
+    option.textContent = "לא נמצאו קולות באנגלית";
+    voiceSelect.appendChild(option);
+  }
+}
+
+function waitForVoices(timeout = 3000) {
+  return new Promise(resolve => {
+    let voices = speechSynthesis.getVoices();
+    if (voices.length !== 0) {
+      resolve();
+      return;
+    }
+    let interval = setInterval(() => {
+      voices = speechSynthesis.getVoices();
+      if (voices.length !== 0) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 100);
+    setTimeout(() => {
+      clearInterval(interval);
+      resolve();
+    }, timeout);
+  });
 }
 
 speechSynthesis.onvoiceschanged = populateVoices;
 
-function testVoice() {
+async function testVoice() {
+  await waitForVoices();
   const voices = speechSynthesis.getVoices().filter(v => v.lang.includes('en'));
   const index = document.getElementById("voiceSelect").value;
   selectedVoice = voices[index];
@@ -74,7 +103,14 @@ function updateRateLabel() {
 
 document.getElementById("rateRange").addEventListener("input", updateRateLabel);
 
-function startTest() {
+async function startTest() {
+  await waitForVoices();
+  populateVoices();
+  const index = document.getElementById("voiceSelect").value;
+  const voices = speechSynthesis.getVoices().filter(v => v.lang.includes('en'));
+  selectedVoice = voices[index];
+  speechRate = parseFloat(document.getElementById("rateRange").value);
+
   document.getElementById("settings").style.display = "none";
   document.getElementById("question-box").style.display = "block";
   document.getElementById("totalQuestions").textContent = words.length;
