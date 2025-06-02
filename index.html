@@ -4,39 +4,70 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SpellMaster - לימוד איות</title>
+  <title>SpellMaster - מבחן איות</title>
   <style>
     body {
       font-family: sans-serif;
       background: linear-gradient(to bottom right, #4facfe, #00f2fe);
       color: #fff;
       text-align: center;
-      padding: 50px;
+      padding: 40px;
     }
     .container {
       max-width: 700px;
       margin: auto;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0,0,0,0.4);
       padding: 2rem;
-      border-radius: 20px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+      border-radius: 15px;
     }
-    h1 {
-      font-size: 2.5rem;
-      margin-bottom: 1rem;
+    select, input[type="text"], button, input[type="range"] {
+      margin: 10px 0;
+      padding: 10px;
+      font-size: 1rem;
+      border-radius: 5px;
+      border: none;
     }
-    p {
-      font-size: 1.2rem;
+    button {
+      background-color: #fff;
+      color: #333;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #eee;
+    }
+    #question-box {
+      margin-top: 30px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>SpellMaster - אפליקציה חיה!</h1>
-    <p>האפליקציה שלך נטענה בהצלחה. כאן יופיע ממשק שלם ללימוד אנגלית.</p>
-    <p>כולל איות, משחקים, דיבור אוטומטי ותרגול אינטראקטיבי.</p>
-    <p>ברוך הבא! 🎓📚</p>
+    <h1>SpellMaster - מבחן איות</h1>
+
+    <div id="settings">
+      <h2>🎤 בחר קריין ומהירות</h2>
+      <label>בחר קול:</label><br/>
+      <select id="voiceSelect"></select><br/>
+
+      <label>מהירות דיבור:</label><br/>
+      <input type="range" id="rateRange" min="0.5" max="1.5" step="0.1" value="1">
+      <div id="rateLabel">רגיל</div><br/>
+
+      <button onclick="testVoice()">🔊 בדוק קול</button><br/><br/>
+      <button onclick="startTest()">🚀 התחל מבחן</button>
+    </div>
+
+    <div id="question-box" style="display:none;">
+      <h2>שאלה <span id="questionNumber">1</span> מתוך <span id="totalQuestions"></span></h2>
+      <p><strong>תרגום:</strong> <span id="translation"></span></p>
+      <p><strong>קטגוריה:</strong> <span id="category"></span></p>
+      <button onclick="speakCurrentWord()">🔊 האזן שוב</button><br/><br/>
+      <input type="text" id="userInput" placeholder="הקלד את המילה כאן" onkeypress="handleKey(event)">
+      <p id="feedback"></p>
+      <button onclick="submitAnswer()">שלח</button>
+    </div>
   </div>
+
   <script src="app.js"></script>
 </body>
 </html>
