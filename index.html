@@ -1,15 +1,849 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SpellMaster - לימוד איות באנגלית</title>
-</head>
-<body>
-    <div style="text-align: center; padding: 50px; font-family: Arial;">
-        <h1>SpellMaster</h1>
-        <p>משחק לימוד איות באנגלית - בקרוב!</p>
-        <p>הקובץ נוצר בהצלחה ב-GitHub! 🎉</p>
-    </div>
-</body>
-</html>
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, where, updateDoc } from 'firebase/firestore';
+
+// Ensure __app_id and __firebase_config are defined in the environment
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+// Word data for Level 1
+const wordLevels = {
+    1: [ // Level 1: Basic (3-4 letters) - Updated with 25 words from PDF
+        { id: 1, word: "bag", translation: "תיק", category: "Noun", sentences: [{ en: "She carried a small bag.", he: "היא נשאה תיק קטן." }, { en: "Put your books in the bag.", he: "שים את הספרים שלך בתיק." }] },
+        { id: 2, word: "cat", translation: "חתול", category: "Noun", sentences: [{ en: "The cat slept on the mat.", he: "החתול ישן על השטיח." }, { en: "My cat loves to play.", he: "החתול שלי אוהב לשחק." }] },
+        { id: 3, word: "black", translation: "שחור", category: "Adjective", sentences: [{ en: "He wore a black coat.", he: "הוא לבש מעיל שחור." }, { en: "The night was very black.", he: "הלילה היה שחור מאוד." }] },
+        { id: 4, word: "glass", translation: "כוס/זכוכית", category: "Noun", sentences: [{ en: "Fill the glass with water.", he: "מלא את הכוס במים." }, { en: "The window is made of glass.", he: "החלון עשוי מזכוכית." }] },
+        { id: 5, word: "class", translation: "כיתה/שיעור", category: "Noun", sentences: [{ en: "The class started at 8 AM.", he: "השיעור התחיל בשמונה בבוקר." }, { en: "She is the best in her class.", he: "היא הטובה ביותר בכיתה שלה." }] },
+        { id: 6, word: "bed", translation: "מיטה", category: "Noun", sentences: [{ en: "Time to go to bed.", he: "הגיע הזמן ללכת לישון." }, { en: "The bed is comfortable.", he: "המיטה נוחה." }] },
+        { id: 7, word: "left", translation: "שמאל/עזב", category: "Adjective/Verb", sentences: [{ en: "Turn left at the corner.", he: "פנה שמאלה בפינה." }, { en: "He left his keys at home.", he: "הוא עזב את המפתחות בבית." }] },
+        { id: 8, word: "egg", translation: "ביצה", category: "Noun", sentences: [{ en: "She cooked an egg for breakfast.", he: "היא בישלה ביצה לארוחת בוקר." }, { en: "The bird laid an egg.", he: "הציפור הטילה ביצה." }] },
+        { id: 9, word: "ten", translation: "עשר", category: "Number", sentences: [{ en: "I have ten fingers.", he: "יש לי עשר אצבעות." }, { en: "The clock struck ten.", he: "השעון הכה עשר." }] },
+        { id: 10, word: "pen", translation: "עט", category: "Noun", sentences: [{ en: "Can I borrow your pen?", he: "אפשר ללוות את העט שלך?" }, { en: "Write your name with a pen.", he: "כתוב את שמך בעט." }] },
+        { id: 11, word: "pill", translation: "גלולה", category: "Noun", sentences: [{ en: "Take one pill before bed.", he: "קח גלולה אחת לפני השינה." }, { en: "The doctor prescribed a pill.", he: "הרופא רשם גלולה." }] },
+        { id: 12, word: "fish", translation: "דג", category: "Noun", sentences: [{ en: "The fish swims in the water.", he: "הדג שוחה במים." }, { en: "I like to eat fish.", he: "אני אוהב לאכול דג." }] },
+        { id: 13, word: "ship", translation: "אונייה", category: "Noun", sentences: [{ en: "The ship sailed across the ocean.", he: "האונייה הפליגה מעבר לאוקיינוס." }, { en: "He works on a cargo ship.", he: "הוא עובד על אוניית מטען." }] },
+        { id: 14, word: "pin", translation: "סיכה", category: "Noun", sentences: [{ en: "She used a pin to hold her hair.", he: "היא השתמשה בסיכה כדי להחזיק את שערה." }, { en: "Be careful, the pin is sharp.", he: "היזהר, הסיכה חדה." }] },
+        { id: 15, word: "six", translation: "שש", category: "Number", sentences: [{ en: "There are six apples on the table.", he: "יש שישה תפוחים על השולחן." }, { en: "He is six years old.", he: "הוא בן שש." }] },
+        { id: 16, word: "fox", translation: "שועל", category: "Noun", sentences: [{ en: "The fox ran into the forest.", he: "השועל רץ אל היער." }, { en: "A clever fox outsmarted the hunter.", he: "שועל ערמומי הערים על הצייד." }] },
+        { id: 17, word: "frog", translation: "צפרדע", category: "Noun", sentences: [{ en: "The frog jumped into the pond.", he: "הצפרדע קפצה לבריכה." }, { en: "Frogs can live on land and in water.", he: "צפרדעים יכולות לחיות ביבשה ובמים." }] },
+        { id: 18, word: "job", translation: "עבודה", category: "Noun", sentences: [{ en: "He got a new job.", he: "הוא קיבל עבודה חדשה." }, { en: "It's a difficult job.", he: "זו עבודה קשה." }] },
+        { id: 19, word: "hot", translation: "חם", category: "Adjective", sentences: [{ en: "The tea is very hot.", he: "התה חם מאוד." }, { en: "It's a hot summer day.", he: "זה יום קיץ חם." }] },
+        { id: 20, word: "doll", translation: "בובה", category: "Noun", sentences: [{ en: "The girl played with her doll.", he: "הילדה שיחקה עם הבובה שלה." }, { en: "She has a collection of dolls.", he: "יש לה אוסף של בובות." }] },
+        { id: 21, word: "sun", translation: "שמש", category: "Noun", sentences: [{ en: "The sun shines brightly.", he: "השמש זורחת בבהירות." }, { en: "Don't look directly at the sun.", he: "אל תסתכל ישירות על השמש." }] },
+        { id: 22, word: "bus", translation: "אוטובוס", category: "Noun", sentences: [{ en: "I take the bus to work.", he: "אני לוקח את האוטובוס לעבודה." }] },
+        { id: 23, word: "truck", translation: "משאית", category: "Noun", sentences: [{ en: "A large truck drove by.", he: "משאית גדולה נסעה ליד." }, { en: "The truck delivered the goods.", he: "המשאית העבירה את הסחורה." }] },
+        { id: 24, word: "duck", translation: "ברווז", category: "Noun", sentences: [{ en: "The duck swam in the pond.", he: "הברווז שחה בבריכה." }, { en: "Ducks quack loudly.", he: "ברווזים מגעגעים בקול רם." }] },
+        { id: 25, word: "run", translation: "לרוץ", category: "Verb", sentences: [{ en: "He likes to run every morning.", he: "הוא אוהב לרוץ כל בוקר." }, { en: "Don't run in the hallway.", he: "אל תרוץ במסדרון." }] }
+    ]
+};
+
+// Static story data for Level 1 - Hardcoded for consistency and grammatical correctness
+const staticStoryDataLevel1 = {
+    storyText: "יום אחד, ה__BLANK_CAT__ הקטן וה__BLANK_BLACK__ רצה ל__BLANK_RUN__ עם ה__BLANK_DOG__ ה__BLANK_BIG__ שלה. הם נשאו __BLANK_BAG__ קטן ושתה מים מ__BLANK_GLASS__. ה__BLANK_SUN__ זרחה מעל ה__BLANK_TREE__ הירוק. הם רצו בגינה, החתול עם ה__BLANK_HAT__ ה__BLANK_RED__ על ה__BLANK_NOSE__. הכלב שיחק עם __BLANK_BALL__. פתאום, ה__BLANK_BIRD__ עף מה__BLANK_TREE__. הוא עף מעל ה__BLANK_CAR__ שנסעה בכביש. הכלב הרים __BLANK_HAND__ ונגע ב__BLANK_EAR__ שלו. לאחר מכן, הוא הלך לישון ב__BLANK_BED__. הוא לקח __BLANK_BOOK__ ו__BLANK_PEN__ וכתב על ה__BLANK_JOB__ שלו. הוא הרגיש __BLANK_HOT__ ושתה מ__BLANK_CUP__. הוא ראה __BLANK_FISH__ שוחה ו__BLANK_DUCK__ מגעגע. הוא הצמיד __BLANK_PIN__ ל__BLANK_HAT__ שלו. הוא הזיז את ה__BLANK_LEG__ וה__BLANK_ARM__ שלו. הוא פקח את ה__BLANK_EYE__ ונגע ב__BLANK_FOOT__ שלו. הוא פתח את ה__BLANK_BOX__. הוא קיבל __BLANK_SIX__ נקודות ו__BLANK_TEN__ שקלים. הוא שיחק עם ה__BLANK_DOLL__ ולקח __BLANK_PILL__. הוא ראה __BLANK_SHIP__ מפליגה בים. הוא עלה על ה__BLANK_BUS__ ונסע ב__BLANK_TRUCK__. הוא __BLANK_LEFT__ את ה__BLANK_CLASS__ בבוקר.",
+    blanks: [
+        { placeholder: "__BLANK_CAT__", correctWord: "cat", options: ["cat", "dog", "run", "sun"] },
+        { placeholder: "__BLANK_BLACK__", correctWord: "black", options: ["black", "red", "big", "hot"] },
+        { placeholder: "__BLANK_RUN__", correctWord: "run", options: ["run", "walk", "jump", "sleep"] },
+        { placeholder: "__BLANK_DOG__", correctWord: "dog", options: ["dog", "cat", "fox", "duck"] },
+        { placeholder: "__BLANK_BIG__", correctWord: "big", options: ["big", "small", "red", "hot"] },
+        { placeholder: "__BLANK_BAG__", correctWord: "bag", options: ["bag", "box", "cup", "book"] },
+        { placeholder: "__BLANK_GLASS__", correctWord: "glass", options: ["glass", "cup", "bottle", "plate"] },
+        { placeholder: "__BLANK_SUN__", correctWord: "sun", options: ["sun", "moon", "star", "cloud"] },
+        { placeholder: "__BLANK_TREE__", correctWord: "tree", options: ["tree", "bush", "flower", "grass"] },
+        { placeholder: "__BLANK_HAT__", correctWord: "hat", options: ["hat", "cap", "glove", "shoe"] },
+        { placeholder: "__BLANK_RED__", correctWord: "red", options: ["red", "blue", "green", "black"] },
+        { placeholder: "__BLANK_NOSE__", correctWord: "nose", options: ["nose", "ear", "eye", "mouth"] },
+        { placeholder: "__BLANK_BALL__", correctWord: "ball", options: ["ball", "bell", "bowl", "bill"] },
+        { placeholder: "__BLANK_BIRD__", correctWord: "bird", options: ["bird", "fish", "duck", "frog"] },
+        { placeholder: "__BLANK_CAR__", correctWord: "car", options: ["car", "bus", "truck", "bike"] },
+        { placeholder: "__BLANK_HAND__", correctWord: "hand", options: ["hand", "foot", "arm", "leg"] },
+        { placeholder: "__BLANK_EAR__", correctWord: "ear", options: ["ear", "eye", "nose", "mouth"] },
+        { placeholder: "__BLANK_BED__", correctWord: "bed", options: ["bed", "chair", "table", "sofa"] },
+        { placeholder: "__BLANK_BOOK__", correctWord: "book", options: ["book", "pen", "paper", "story"] },
+        { placeholder: "__BLANK_PEN__", correctWord: "pen", options: ["pen", "pencil", "marker", "crayon"] },
+        { placeholder: "__BLANK_JOB__", correctWord: "job", options: ["job", "work", "task", "duty"] },
+        { placeholder: "__BLANK_HOT__", correctWord: "hot", options: ["hot", "cold", "warm", "cool"] },
+        { placeholder: "__BLANK_CUP__", correctWord: "cup", options: ["cup", "glass", "mug", "bowl"] },
+        { placeholder: "__BLANK_FISH__", correctWord: "fish", options: ["fish", "bird", "duck", "frog"] },
+        { placeholder: "__BLANK_DUCK__", correctWord: "duck", options: ["duck", "bird", "frog", "fish"] },
+        { placeholder: "__BLANK_PIN__", correctWord: "pin", options: ["pin", "needle", "clip", "button"] },
+        { placeholder: "__BLANK_SIX__", correctWord: "six", options: ["six", "five", "seven", "eight"] },
+        { placeholder: "__BLANK_TEN__", correctWord: "ten", options: ["ten", "nine", "eleven", "twelve"] },
+        { placeholder: "__BLANK_DOLL__", correctWord: "doll", options: ["doll", "toy", "puppet", "figure"] },
+        { placeholder: "__BLANK_PILL__", correctWord: "pill", options: ["pill", "tablet", "capsule", "drug"] },
+        { placeholder: "__BLANK_SHIP__", correctWord: "ship", options: ["ship", "boat", "yacht", "vessel"] },
+        { placeholder: "__BLANK_BUS__", correctWord: "bus", options: ["bus", "car", "train", "plane"] },
+        { placeholder: "__BLANK_TRUCK__", correctWord: "truck", options: ["truck", "car", "bus", "van"] },
+        { placeholder: "__BLANK_LEFT__", correctWord: "left", options: ["left", "right", "straight", "turn"] },
+        { placeholder: "__BLANK_CLASS__", correctWord: "class", options: ["class", "lesson", "course", "school"] },
+        { placeholder: "__BLANK_ARM__", correctWord: "arm", options: ["arm", "leg", "hand", "foot"] },
+        { placeholder: "__BLANK_EYE__", correctWord: "eye", options: ["eye", "ear", "nose", "mouth"] },
+        { placeholder: "__BLANK_FOOT__", correctWord: "foot", options: ["foot", "hand", "leg", "arm"] },
+        { placeholder: "__BLANK_BOX__", correctWord: "box", options: ["box", "bag", "container", "crate"] }
+    ]
+};
+
+
+// Utility for Text-to-Speech
+const speak = (text, lang = 'en-US') => {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); // Stop any ongoing speech
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+
+        // Voice settings for more natural speech
+        utterance.rate = window.speechRate || 0.85; // Use custom rate or default
+        utterance.pitch = 1.0; // Natural pitch
+        utterance.volume = 1.0; // Full volume
+
+        // Use the voice selected by the user
+        const voices = window.speechSynthesis.getVoices();
+        const englishVoices = voices.filter(voice => voice.lang.includes('en'));
+
+        if (window.selectedVoiceIndex !== undefined && englishVoices[window.selectedVoiceIndex]) {
+            utterance.voice = englishVoices[window.selectedVoiceIndex];
+        } else {
+            // Fallback to finding a good voice
+            const preferredVoices = [
+                'Google US English',
+                'Microsoft Zira - English (United States)',
+                'Microsoft David - English (United States)',
+                'Google UK English Female',
+                'Google UK English Male',
+                'Samantha', // macOS
+                'Alex', // macOS
+                'Victoria', // macOS
+                'Karen' // iOS
+            ];
+
+            let selectedVoice = voices.find(voice =>
+                voice.lang.includes('en') &&
+                preferredVoices.some(preferred => voice.name.includes(preferred))
+            );
+
+            if (!selectedVoice) {
+                selectedVoice = voices.find(voice =>
+                    voice.lang.includes('en-US') &&
+                    !voice.name.includes('eSpeak') && // Avoid robotic voices
+                    !voice.default // Prefer non-default if available
+                );
+            }
+
+            if (!selectedVoice) {
+                selectedVoice = voices.find(voice => voice.lang.includes('en')); // Any English voice
+            }
+
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+            }
+        }
+
+        window.speechSynthesis.speak(utterance);
+    } else {
+        console.warn("Speech Synthesis not supported in this browser.");
+    }
+};
+
+// Initialize voices when they're loaded
+if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = () => {
+        const voices = window.speechSynthesis.getVoices();
+        console.log('Available voices:', voices.map(v => v.name));
+        // You might want to trigger a re-render of HomeScreen if it's currently displayed
+        // to update the voice selection dropdown. This would require passing a callback.
+    };
+}
+
+// Category translations
+const categoryTranslations = {
+    "Determiner": "מילת קביעה",
+    "Noun": "שם עצם",
+    "Verb": "פועל",
+    "Adjective": "שם תואר"
+};
+
+// Modal component
+const Modal = ({ show, title, message, onClose, showConfirmButton = false, onConfirm }) => {
+    if (!show) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full flex flex-col max-h-[90vh]">
+                <h3 className="text-xl font-bold mb-4 text-gray-800 text-center">{title}</h3>
+                <div className="overflow-y-auto flex-grow px-2 text-right">
+                    {message}
+                </div>
+                <div className="flex justify-center space-x-4 mt-6 flex-shrink-0">
+                    <button
+                        onClick={onClose}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full transition duration-300 ease-in-out transform hover:scale-105 shadow-md"
+                    >
+                        סגור
+                    </button>
+                    {showConfirmButton && (
+                        <button
+                            onClick={onConfirm}
+                            className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-full transition duration-300 ease-in-out transform hover:scale-105 shadow-md"
+                        >
+                            אשר
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Home Screen with voice settings
+const HomeScreen = ({ onStartGame }) => {
+    const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+    const [availableVoices, setAvailableVoices] = useState([]);
+    const [selectedVoiceIndex, setSelectedVoiceIndex] = useState(0);
+    const [speechRate, setSpeechRate] = useState(window.speechRate || 0.85);
+
+    useEffect(() => {
+        const loadVoices = () => {
+            const voices = window.speechSynthesis.getVoices();
+            const englishVoices = voices.filter(voice => voice.lang.includes('en'));
+            setAvailableVoices(englishVoices);
+
+            // Try to select a good default voice
+            const preferredIndex = englishVoices.findIndex(voice =>
+                voice.name.includes('Google') ||
+                voice.name.includes('Microsoft') ||
+                voice.name.includes('Samantha') ||
+                voice.name.includes('Alex')
+            );
+
+            if (preferredIndex !== -1) {
+                setSelectedVoiceIndex(preferredIndex);
+                window.selectedVoiceIndex = preferredIndex;
+            } else if (englishVoices.length > 0) {
+                setSelectedVoiceIndex(0); // Fallback to the first available English voice
+                window.selectedVoiceIndex = 0;
+            }
+        };
+
+        loadVoices();
+        // Listen for voiceschanged event as voices might not be loaded immediately
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+
+        // Cleanup event listener
+        return () => {
+            window.speechSynthesis.onvoiceschanged = null;
+        };
+    }, []);
+
+    const testVoice = () => {
+        const text = "Hello! I will help you learn English spelling.";
+        speak(text);
+    };
+
+    const handleVoiceChange = (index) => {
+        setSelectedVoiceIndex(index);
+        window.selectedVoiceIndex = index; // Store globally for use in speak function
+        // Test the new voice immediately
+        if (availableVoices[index]) {
+            speak("This is a test of the new voice.", availableVoices[index].lang);
+        }
+    };
+
+    const handleSpeedChange = (newRate) => {
+        setSpeechRate(newRate);
+        window.speechRate = newRate; // Store globally
+        // Test the new speed immediately
+        speak("Testing speech speed.", 'en-US');
+    };
+
+    const getSpeedLabel = (rate) => {
+        if (rate < 0.7) return "איטי מאוד";
+        if (rate < 0.85) return "איטי";
+        if (rate < 1.15) return "רגיל";
+        if (rate < 1.3) return "מהיר";
+        return "מהיר מאוד";
+    };
+
+    return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-400 to-purple-600 text-white p-4">
+            <h1 className="text-5xl font-extrabold mb-8 drop-shadow-lg text-center">SpellMaster</h1>
+            <p className="text-xl mb-10 text-center max-w-md">
+                שפר את האיות ואוצר המילים שלך באנגלית בדרך מהנה!
+            </p>
+
+            <div className="flex gap-4 mb-6">
+                <button
+                    onClick={onStartGame}
+                    className="bg-white text-purple-700 font-bold py-4 px-8 rounded-full text-2xl shadow-lg hover:shadow-xl transition duration-300 transform hover:scale-105"
+                >
+                    התחל משחק
+                </button>
+
+                <button
+                    onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+                    className="bg-purple-800 text-white font-bold py-4 px-6 rounded-full text-xl shadow-lg hover:shadow-xl transition duration-300"
+                    title="הגדרות קול"
+                >
+                    🔊
+                </button>
+            </div>
+
+            {showVoiceSettings && (
+                <div className="bg-white bg-opacity-20 p-6 rounded-lg shadow-lg max-w-md w-full">
+                    <h3 className="text-xl font-bold mb-4 text-white">הגדרות קול:</h3>
+
+                    {availableVoices.length > 0 ? (
+                        <>
+                            {/* Voice selection */}
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-2 text-white">בחר קול:</label>
+                                <select
+                                    value={selectedVoiceIndex}
+                                    onChange={(e) => handleVoiceChange(Number(e.target.value))}
+                                    className="w-full p-2 rounded text-gray-800"
+                                >
+                                    {availableVoices.map((voice, index) => (
+                                        <option key={voice.name + index} value={index}>
+                                            {voice.name} ({voice.lang})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Speed control */}
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium mb-2 text-white">
+                                    מהירות דיבור: {getSpeedLabel(speechRate)} ({speechRate.toFixed(2)})
+                                </label>
+                                <input
+                                    type="range"
+                                    min="0.5"
+                                    max="1.5"
+                                    step="0.05"
+                                    value={speechRate}
+                                    onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
+                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                                <div className="flex justify-between text-xs mt-1 text-white">
+                                    <span>איטי</span>
+                                    <span>רגיל</span>
+                                    <span>מהיר</span>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={testVoice}
+                                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full w-full shadow-md"
+                            >
+                                🔊 נסה את הקול
+                            </button>
+                        </>
+                    ) : (
+                        <p className="text-white text-center">טוען קולות או שירות הדיבור אינו זמין בדפדפן זה.</p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Story Completion Screen
+const StoryCompletionScreen = ({ onStoryCompletionDone, currentLevel, onBackToHome }) => {
+    const [storyData, setStoryData] = useState(null);
+    const [userAnswers, setUserAnswers] = useState({});
+    const [score, setScore] = useState(0);
+    const [showResults, setShowResults] = useState(false);
+
+    useEffect(() => {
+        const shuffleArray = (array) => {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        };
+
+        const shuffledBlanks = staticStoryDataLevel1.blanks.map(blank => ({
+            ...blank,
+            options: shuffleArray(blank.options)
+        }));
+
+        setStoryData({
+            ...staticStoryDataLevel1,
+            blanks: shuffledBlanks
+        });
+        setUserAnswers({});
+        setScore(0);
+        setShowResults(false);
+    }, [currentLevel]);
+
+    const handleSelectChange = (placeholder, value) => {
+        setUserAnswers(prev => ({ ...prev, [placeholder]: value }));
+    };
+
+    const handleSubmit = () => {
+        let currentScore = 0;
+        storyData.blanks.forEach(blank => {
+            if (userAnswers[blank.placeholder]?.toLowerCase() === blank.correctWord.toLowerCase()) {
+                currentScore += 2;
+            }
+        });
+        setScore(currentScore);
+        setShowResults(true);
+    };
+
+    const renderStory = () => {
+        if (!storyData) return null;
+
+        const parts = [];
+        let currentText = storyData.storyText;
+        
+        const regex = new RegExp(storyData.blanks.map(b => b.placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+        const segments = currentText.split(regex);
+        const matches = currentText.match(regex);
+
+        segments.forEach((segment, index) => {
+            parts.push(<span key={`text-segment-${index}`}>{segment}</span>);
+            
+            if (matches && index < matches.length) {
+                const placeholder = matches[index];
+                const blank = storyData.blanks.find(b => b.placeholder === placeholder);
+                if (blank) {
+                    parts.push(
+                        <select
+                            key={`select-${index}`}
+                            className="mx-1 p-1 rounded bg-gray-100 text-gray-800 border"
+                            value={userAnswers[blank.placeholder] || ''}
+                            onChange={(e) => handleSelectChange(blank.placeholder, e.target.value)}
+                            disabled={showResults}
+                        >
+                            <option value=""></option> {/* Empty option as placeholder */}
+                            {blank.options.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    );
+                }
+            }
+        });
+
+        return <p className="text-lg leading-relaxed text-gray-800 text-right">{parts}</p>;
+    };
+
+    if (!storyData) return <div className="flex items-center justify-center min-h-screen text-white">טוען...</div>;
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 text-white p-4 flex flex-col items-center">
+            <div className="max-w-4xl w-full mx-auto bg-white bg-opacity-20 rounded-xl shadow-lg p-6">
+                <h2 className="text-4xl font-bold mb-4 text-center">סיפור השלמה - שלב {currentLevel}</h2>
+                <div className="bg-white p-6 rounded-lg shadow-md text-gray-800">
+                    {renderStory()}
+                </div>
+                
+                <div className="flex gap-4 mt-6 justify-center">
+                    <button
+                        onClick={handleSubmit}
+                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-full text-lg shadow-lg"
+                    >
+                        סיים סיפור
+                    </button>
+                    <button
+                        onClick={onBackToHome} // Added back to home button
+                        className="bg-gray-700 text-white font-bold py-3 px-6 rounded-full text-lg shadow-lg"
+                    >
+                        חזור למסך הבית
+                    </button>
+                </div>
+                
+                {showResults && (
+                    <div className="mt-6 p-4 bg-white bg-opacity-30 rounded-lg">
+                        <h4 className="text-2xl font-bold mb-4 text-center text-white">צברת: {score} נקודות</h4>
+                        <button
+                            onClick={() => onStoryCompletionDone(score)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full text-lg shadow-lg w-full"
+                        >
+                            המשך למבחן
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// Preparation Screen
+const PreparationScreen = ({ words, onStartTest, currentLevel, onBackToHome, onStartStoryCompletion }) => {
+    const [selectedWord, setSelectedWord] = useState(null);
+    const [showModal, setShowModal] = useState(false);
+
+    const handleWordClick = (word) => {
+        setSelectedWord(word);
+        setShowModal(true);
+    };
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 text-white p-4 flex flex-col items-center">
+            <div className="max-w-4xl w-full bg-white bg-opacity-20 rounded-xl shadow-lg p-6">
+                <h2 className="text-4xl font-bold mb-4 text-center">שלב הכנה - שלב {currentLevel}</h2>
+                <p className="text-lg mb-6 text-center">לחץ על מילה כדי לראות דוגמאות</p>
+                
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {words.map((word) => (
+                        <div
+                            key={word.id}
+                            className="bg-white bg-opacity-30 p-4 rounded-lg shadow-md cursor-pointer hover:bg-opacity-40 transition"
+                            onClick={() => handleWordClick(word)}
+                        >
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-xl font-semibold">{word.word}</span>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); speak(word.word); }}
+                                    className="p-2 rounded-full bg-blue-600 hover:bg-blue-700"
+                                >
+                                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M9.383 3.087A1 1 0 0110 3v14a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.206zM14.5 7a.5.5 0 00-1 0v6a.5.5 0 001 0V7zM16.5 5a.5.5 0 00-1 0v10a.5.5 0 001 0V5z" clipRule="evenodd"></path></svg>
+                                </button>
+                            </div>
+                            <p className="text-sm">{word.translation} ({categoryTranslations[word.category] || word.category})</p>
+                        </div>
+                    ))}
+                </div>
+                
+                <div className="flex gap-4 mt-6 justify-center">
+                    <button onClick={onStartStoryCompletion} className="bg-white text-blue-700 font-bold py-3 px-6 rounded-full shadow-lg hover:shadow-xl transition">
+                        התחל סיפור
+                    </button>
+                    <button onClick={onStartTest} className="bg-white text-blue-700 font-bold py-3 px-6 rounded-full shadow-lg hover:shadow-xl transition">
+                        התחל מבחן
+                    </button>
+                    <button onClick={onBackToHome} className="bg-gray-700 text-white font-bold py-3 px-6 rounded-full shadow-lg hover:shadow-xl transition">
+                        חזור למסך הבית
+                    </button>
+                </div>
+            </div>
+
+            <Modal
+                show={showModal}
+                title={selectedWord ? `${selectedWord.word}` : ""}
+                message={
+                    selectedWord && (
+                        <div>
+                            <p className="mb-2"><strong>תרגום:</strong> {selectedWord.translation}</p>
+                            <p className="mb-4"><strong>קטגוריה:</strong> {categoryTranslations[selectedWord.category] || selectedWord.category}</p>
+                            <h4 className="font-semibold mb-2">משפטי דוגמה:</h4>
+                            {selectedWord.sentences.map((sentence, idx) => (
+                                <div key={idx} className="mb-3 p-2 border-b border-gray-200 last:border-b-0">
+                                    <p className="mb-1">
+                                        <span className="font-bold text-blue-600" dangerouslySetInnerHTML={{ __html: sentence.en.replace(new RegExp(selectedWord.word, 'gi'), match => `<span class="underline">${match}</span>`) }}></span>
+                                    </p>
+                                    <p className="text-sm text-gray-600 mb-1">{sentence.he}</p>
+                                    <button
+                                        onClick={() => speak(sentence.en)}
+                                        className="text-blue-500 hover:text-blue-700 text-sm p-1 rounded-full"
+                                        aria-label={`השמע את המשפט: ${sentence.en}`}
+                                    >
+                                        <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M9.383 3.087A1 1 0 0110 3v14a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.206zM14.5 7a.5.5 0 00-1 0v6a.5.5 0 001 0V7zM16.5 5a.5.5 0 00-1 0v10a.5.5 0 001 0V5z" clipRule="evenodd"></path></svg>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )
+                }
+                onClose={() => setShowModal(false)}
+            />
+        </div>
+    );
+};
+
+// Test Screen
+const TestScreen = ({ words, onEndTest, currentLevel, onLevelFailed, onBackToHome }) => {
+    const [currentWordIndex, setCurrentWordIndex] = useState(0);
+    const [inputValue, setInputValue] = useState('');
+    const [feedback, setFeedback] = useState('');
+    const [score, setScore] = useState(0);
+    const [correctCount, setCorrectCount] = useState(0);
+    const inputRef = useRef(null);
+
+    const currentWord = words[currentWordIndex];
+
+    useEffect(() => {
+        if (currentWord) {
+            speak(currentWord.word);
+            setInputValue('');
+            inputRef.current?.focus();
+        }
+    }, [currentWordIndex, currentWord]);
+
+    const handleSubmit = () => {
+        const isCorrect = inputValue.toLowerCase() === currentWord.word.toLowerCase();
+        
+        if (isCorrect) {
+            setFeedback('נכון! 🎉');
+            setScore(prev => prev + 10);
+            setCorrectCount(prev => prev + 1);
+            setTimeout(() => {
+                if (currentWordIndex < words.length - 1) {
+                    setCurrentWordIndex(currentWordIndex + 1);
+                    setFeedback('');
+                } else {
+                    onEndTest(score + 10, correctCount + 1);
+                }
+            }, 1000);
+        } else {
+            setFeedback(`טעות. המילה הנכונה: ${currentWord.word}`);
+            setScore(prev => prev - 5);
+            setTimeout(() => {
+                if (currentWordIndex < words.length - 1) {
+                    setCurrentWordIndex(currentWordIndex + 1);
+                    setFeedback('');
+                } else {
+                    onEndTest(score - 5, correctCount);
+                }
+            }, 2000);
+        }
+    };
+
+    if (!currentWord) return null;
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-purple-500 to-pink-600 text-white p-4 flex items-center justify-center">
+            <div className="max-w-xl w-full bg-white bg-opacity-20 rounded-xl shadow-lg p-8 text-center">
+                <h2 className="text-3xl font-bold mb-4">מבחן איות - שלב {currentLevel}</h2>
+                <p className="text-xl mb-2">מילה {currentWordIndex + 1} מתוך {words.length}</p>
+                <p className="text-lg mb-6">נקודות: {score}</p>
+
+                <div className="mb-8 p-6 bg-white bg-opacity-30 rounded-lg">
+                    <p className="text-3xl font-bold mb-2">{currentWord.translation}</p>
+                    <p className="text-xl mb-4">({categoryTranslations[currentWord.category] || currentWord.category})</p>
+                    <button
+                        onClick={() => speak(currentWord.word)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-md"
+                        aria-label={`האזן שוב את המילה ${currentWord.word}`}
+                    >
+                        🔊 האזן שוב
+                    </button>
+                </div>
+
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+                    className="w-full p-4 text-2xl text-center rounded-lg text-gray-800 mb-4 shadow-inner"
+                    placeholder="הקלד את המילה..."
+                />
+                
+                <div className="flex gap-4 mt-6 justify-center">
+                    <button
+                        onClick={handleSubmit}
+                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg"
+                    >
+                        שלח
+                    </button>
+                    <button
+                        onClick={onBackToHome} // Added back to home button
+                        className="bg-gray-700 text-white font-bold py-3 px-6 rounded-full text-lg shadow-lg"
+                    >
+                        חזור למסך הבית
+                    </button>
+                </div>
+
+                {feedback && (
+                    <p className={`mt-4 text-2xl font-bold ${feedback.includes('נכון') ? 'text-green-300' : 'text-red-300'}`}>
+                        {feedback}
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// Main App Component
+const App = () => {
+    const [currentScreen, setCurrentScreen] = useState('home');
+    const [currentLevel, setCurrentLevel] = useState(1);
+    const [storyScore, setStoryScore] = useState(0);
+    const [db, setDb] = useState(null);
+    const [auth, setAuth] = useState(null);
+    const [userId, setUserId] = useState(null);
+    const [isAuthReady, setIsAuthReady] = useState(false);
+    const [firebaseError, setFirebaseError] = useState('');
+
+    // Initialize Firebase and authenticate
+    useEffect(() => {
+        let appInstance;
+        let firestoreInstance;
+        let authInstance;
+        try {
+            let parsedFirebaseConfig = {};
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                try {
+                    parsedFirebaseConfig = JSON.parse(__firebase_config);
+                } catch (parseError) {
+                    console.error("Error parsing __firebase_config:", parseError);
+                    setFirebaseError("שגיאה באתחול Firebase: תצורת Firebase אינה תקינה.");
+                }
+            }
+
+            if (Object.keys(parsedFirebaseConfig).length > 0) {
+                appInstance = initializeApp(parsedFirebaseConfig);
+                firestoreInstance = getFirestore(appInstance);
+                authInstance = getAuth(appInstance);
+                setDb(firestoreInstance);
+                setAuth(authInstance);
+
+                const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+                    if (user) {
+                        setUserId(user.uid);
+                        console.log("Firebase authenticated:", user.uid);
+                        const userDocRef = doc(firestoreInstance, `artifacts/${appId}/users/${user.uid}/userData/progress`);
+                        const userDocSnap = await getDoc(userDocRef);
+                        if (userDocSnap.exists()) {
+                            const data = userDocSnap.data();
+                            setCurrentLevel(data.currentLevel || 1);
+                            setStoryScore(data.totalScore || 0); // Assuming storyScore is totalScore
+                            console.log("Loaded user progress:", data);
+                        } else {
+                            await setDoc(userDocRef, { currentLevel: 1, totalScore: 0 });
+                            console.log("Initialized new user progress.");
+                        }
+                    } else {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            try {
+                                await signInWithCustomToken(authInstance, __initial_auth_token);
+                            } catch (tokenError) {
+                                console.error("Error signing in with custom token:", tokenError);
+                                setFirebaseError("שגיאה בהתחברות ל-Firebase: טוקן לא תקין.");
+                                await signInAnonymously(authInstance);
+                            }
+                        } else {
+                            await signInAnonymously(authInstance);
+                        }
+                        console.log("Firebase signed in anonymously.");
+                    }
+                    setIsAuthReady(true);
+                });
+                return () => unsubscribe();
+            } else {
+                setFirebaseError("Firebase לא אותחל: תצורת Firebase חסרה או ריקה.");
+                setIsAuthReady(true);
+            }
+        } catch (error) {
+            console.error("Error initializing Firebase or during initial authentication:", error);
+            setFirebaseError(`שגיאה קריטית באתחול Firebase: ${error.message}`);
+            setIsAuthReady(true);
+        }
+    }, []);
+
+    const saveProgress = useCallback(async (level, score) => {
+        if (db && userId && isAuthReady) {
+            try {
+                const userDocRef = doc(db, `artifacts/${appId}/users/${userId}/userData/progress`);
+                await updateDoc(userDocRef, {
+                    currentLevel: level,
+                    totalScore: score,
+                    lastUpdated: new Date()
+                });
+                console.log("Progress saved:", { level, score });
+            } catch (error) {
+                console.error("Error saving progress:", error);
+            }
+        } else {
+            console.warn("Cannot save progress: Firebase not ready or user not authenticated.");
+        }
+    }, [db, userId, isAuthReady]);
+
+    const getCurrentLevelWords = () => wordLevels[currentLevel] || [];
+
+    const handleStartPreparation = () => setCurrentScreen('preparation');
+    const handleStartStoryCompletion = () => setCurrentScreen('story');
+    const handleStartTest = () => setCurrentScreen('test');
+    const handleBackToHome = () => setCurrentScreen('home');
+
+    const handleStoryCompletionDone = (score) => {
+        setStoryScore(prevScore => prevScore + score); // Add story score to total
+        setCurrentScreen('test');
+    };
+
+    const handleEndTest = (testScore, correctCount) => {
+        const totalScore = storyScore + testScore; // Use the accumulated storyScore
+        alert(`כל הכבוד! סיימת עם ${totalScore} נקודות!\nענית נכון על ${correctCount} מתוך ${getCurrentLevelWords().length} מילים.`);
+        
+        // Save progress after a level is completed (or failed)
+        saveProgress(currentLevel, totalScore);
+
+        setCurrentScreen('home');
+        setStoryScore(0); // Reset for next session
+    };
+
+    const handleLevelFailed = () => {
+        alert('נסה שוב!');
+        // No score update on failure, just go back to preparation
+        setCurrentScreen('preparation');
+    };
+
+    if (!isAuthReady) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white text-3xl font-bold">
+                טוען את SpellMaster...
+                {firebaseError && <p className="text-red-500 text-xl mt-4">{firebaseError}</p>}
+            </div>
+        );
+    }
+
+    if (!wordLevels[currentLevel]) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-400 to-purple-600 text-white p-4 text-center">
+                <h1 className="text-4xl font-extrabold mb-4">כל הכבוד!</h1>
+                <p className="text-xl mb-6">אין כרגע מילים נוספות לתרגול. נראה שסיימת את כל השלבים הזמינים!</p>
+                <p className="text-lg">נקודות מצטברות: {storyScore}</p> {/* Display current total score */}
+                <button
+                    onClick={handleBackToHome}
+                    className="mt-8 bg-white text-purple-700 font-bold py-3 px-6 rounded-full text-lg shadow-lg hover:shadow-xl transition duration-300 ease-in-out transform hover:scale-105"
+                >
+                    חזור למסך הבית
+                </button>
+            </div>
+        );
+    }
+
+    switch (currentScreen) {
+        case 'home':
+            return <HomeScreen onStartGame={handleStartPreparation} />;
+        case 'preparation':
+            return (
+                <PreparationScreen
+                    words={getCurrentLevelWords()}
+                    onStartTest={handleStartTest}
+                    onStartStoryCompletion={handleStartStoryCompletion}
+                    currentLevel={currentLevel}
+                    onBackToHome={handleBackToHome}
+                />
+            );
+        case 'story':
+            return (
+                <StoryCompletionScreen
+                    words={getCurrentLevelWords()} // Pass words to story completion for options
+                    onStoryCompletionDone={handleStoryCompletionDone}
+                    currentLevel={currentLevel}
+                    onBackToHome={handleBackToHome} // Pass onBackToHome prop
+                />
+            );
+        case 'test':
+            return (
+                <TestScreen
+                    words={getCurrentLevelWords()}
+                    onEndTest={handleEndTest}
+                    currentLevel={currentLevel}
+                    onLevelFailed={handleLevelFailed}
+                    onBackToHome={handleBackToHome} // Pass onBackToHome prop
+                />
+            );
+        default:
+            return <HomeScreen onStartGame={handleStartPreparation} />;
+    }
+};
+
+export default App;
