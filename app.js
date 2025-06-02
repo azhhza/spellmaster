@@ -150,7 +150,25 @@ function submitAnswer() {
 }
 
 function updateScoreDisplay() {
-  document.getElementById("scoreDisplay").textContent = `ניקוד: ${score} / ${words.length * 4}`;
+  
+    const liveDisplay = document.getElementById("liveScore");
+    if (!liveDisplay) {
+      const box = document.createElement("div");
+      box.id = "liveScore";
+      box.style.position = "fixed";
+      box.style.top = "10px";
+      box.style.left = "10px";
+      box.style.backgroundColor = "#ffffffcc";
+      box.style.padding = "8px 12px";
+      box.style.border = "1px solid #999";
+      box.style.borderRadius = "10px";
+      box.style.fontWeight = "bold";
+      box.style.fontSize = "16px";
+      box.style.zIndex = "1000";
+      document.body.appendChild(box);
+    }
+    document.getElementById("liveScore").textContent = `🔢 ניקוד נוכחי: ${score} / ${words.length * 4}`;
+    
 }
 
 function showFinalResults() {
@@ -158,7 +176,7 @@ function showFinalResults() {
   resultBox.style.padding = "1rem";
   resultBox.style.backgroundColor = "rgba(255,255,255,0.2)";
   resultBox.style.borderRadius = "10px";
-  resultBox.innerHTML = `<h3>🎯 סיימת! הניקוד שלך: ${score} מתוך ${words.length * 4}</h3>`;
+  resultBox.innerHTML = `<h2>🎯 סיימת את המבחן!</h2><h3>🔢 ניקוד סופי: ${score} מתוך ${words.length * 4}</h3>`;
 
   if (wrongAnswers.length > 0) {
     resultBox.innerHTML += "<h4>טעויות שלך:</h4><ul>";
@@ -212,3 +230,9 @@ function loadLastResult() {
 }
 
 window.addEventListener("DOMContentLoaded", loadLastResult);
+
+const originalShowFinalResults = showFinalResults;
+showFinalResults = function() {
+  saveLastResult();
+  originalShowFinalResults();
+};
