@@ -1,2 +1,5 @@
 
-console.log("SpellMaster full app loaded.");
+document.addEventListener("DOMContentLoaded", function () {
+  console.log("SpellMaster real app loaded.");
+  // future app logic would initialize here
+});
